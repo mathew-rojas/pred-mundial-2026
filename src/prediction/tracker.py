@@ -53,7 +53,7 @@ def evaluate(predictions: pd.DataFrame, actuals: pd.DataFrame) -> pd.DataFrame:
 
     merged = preds.merge(act, on=['home_team', 'away_team'], how='left')
 
-    # Predicted result from probs (argmax)
+    # Predicted result from ensemble probabilities (argmax) — best outcome predictor.
     prob_cols = {'home_win': 'p_home_win', 'draw': 'p_draw', 'away_win': 'p_away_win'}
     def _argmax_result(row):
         return max(prob_cols, key=lambda k: row[prob_cols[k]])
