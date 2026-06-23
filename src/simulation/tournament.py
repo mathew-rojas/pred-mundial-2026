@@ -6,6 +6,8 @@ import numpy as np
 import pandas as pd
 from itertools import combinations
 
+from src.models.poisson_model import WC_GOAL_SCALE
+
 # ── Group structure ────────────────────────────────────────────────────────────
 GROUPS: dict[str, list[str]] = {
     'A': ['Argentina', 'Algeria', 'Austria', 'Jordan'],
@@ -88,10 +90,10 @@ def _rank_third_place(all_standings: dict[str, pd.DataFrame]) -> list[str]:
 _MATRIX_CACHE: dict[tuple[str, str], np.ndarray] = {}
 
 
-def _get_matrix(home: str, away: str, poisson_model) -> np.ndarray:
-    key = (_elo_name(home), _elo_name(away))
+def _get_matrix(home: str, away: str, poisson_model, goal_scale=WC_GOAL_SCALE) -> np.ndarray:
+    key = (_elo_name(home), _elo_name(away), goal_scale)
     if key not in _MATRIX_CACHE:
-        mat = poisson_model.predict_score_matrix(key[0], key[1], neutral=True)
+        mat = poisson_model.predict_score_matrix(key[0], key[1], neutral=True, goal_scale=goal_scale)
         flat = mat.flatten()
         _MATRIX_CACHE[key] = flat / flat.sum()
     return _MATRIX_CACHE[key]
@@ -109,6 +111,7 @@ def simulate_match(
     elo_ratings: dict[str, float],
     allow_draw: bool = True,
     rng: np.random.Generator | None = None,
+    goal_scale=WC_GOAL_SCALE,
 ) -> tuple[int, int, str | None]:
     """
     Simulate a single match. Returns (home_goals, away_goals, winner_or_None).
@@ -117,7 +120,7 @@ def simulate_match(
     if rng is None:
         rng = np.random.default_rng()
 
-    flat = _get_matrix(home, away, poisson_model)
+    flat = _get_matrix(home, away, poisson_model, goal_scale=goal_scale)
     n = int(np.sqrt(len(flat)))
     idx = rng.choice(len(flat), p=flat)
     h_goals = int(idx // n)
@@ -200,6 +203,7 @@ def simulate_group_stage_fast(
     poisson_model,
     elo_ratings: dict[str, float],
     rng: np.random.Generator,
+    goal_scale=WC_GOAL_SCALE,
 ) -> tuple[dict[str, list[str]], dict[str, dict[str, _Stats]]]:
     """
     Fast group stage simulation using pre-built base stats (no pandas in loop).
@@ -214,7 +218,7 @@ def simulate_group_stage_fast(
 
     for home, away in pending_list:
         h_goals, a_goals, _ = simulate_match(
-            home, away, poisson_model, elo_ratings, allow_draw=True, rng=rng,
+            home, away, poisson_model, elo_ratings, allow_draw=True, rng=rng, goal_scale=goal_scale,
         )
         g = team_group[home]
         _apply_result(stats[g], home, away, h_goals, a_goals)
@@ -275,6 +279,7 @@ def simulate_knockout(
     poisson_model,
     elo_ratings: dict[str, float],
     rng: np.random.Generator,
+    goal_scale=WC_GOAL_SCALE,
 ) -> dict[str, list[str]]:
     """
     Simulate full knockout bracket from Round of 32.
@@ -291,7 +296,7 @@ def simulate_knockout(
         for home, away in current_round:
             _, _, winner = simulate_match(
                 home, away, poisson_model, elo_ratings,
-                allow_draw=False, rng=rng,
+                allow_draw=False, rng=rng, goal_scale=goal_scale,
             )
             results[round_name].append(winner)
             next_round_teams.append(winner)
@@ -304,7 +309,7 @@ def simulate_knockout(
     # current_round now has exactly 1 pair — the two finalists
     h, a = current_round[0]
     _, _, champion = simulate_match(
-        h, a, poisson_model, elo_ratings, allow_draw=False, rng=rng,
+        h, a, poisson_model, elo_ratings, allow_draw=False, rng=rng, goal_scale=goal_scale,
     )
     results['winner'].append(champion)
 
@@ -318,6 +323,7 @@ def run_monte_carlo(
     elo_ratings: dict[str, float],
     n_simulations: int = 10_000,
     seed: int = 42,
+    goal_scale=WC_GOAL_SCALE,
 ) -> pd.DataFrame:
     """
     Run n_simulations of the remaining 2026 World Cup.
@@ -341,7 +347,7 @@ def run_monte_carlo(
     # Warm up the matrix cache for all pending pairs
     print("  Warming matrix cache...")
     for home, away in pending_list:
-        _get_matrix(home, away, poisson_model)
+        _get_matrix(home, away, poisson_model, goal_scale=goal_scale)
     print(f"  Cache size: {len(_MATRIX_CACHE)} matrices")
 
     all_teams = [t for teams in GROUPS.values() for t in teams]
@@ -360,7 +366,7 @@ def run_monte_carlo(
 
         # Single-pass group stage simulation — returns ranked order AND final stats
         ranked, final_stats = simulate_group_stage_fast(
-            base_stats, pending_list, poisson_model, elo_ratings, rng
+            base_stats, pending_list, poisson_model, elo_ratings, rng, goal_scale=goal_scale,
         )
 
         winners    = [ranked[g][0] for g in sorted(ranked)]
@@ -383,7 +389,7 @@ def run_monte_carlo(
             counts['qualified'][t] += 1
 
         r32_pairs = _build_bracket(winners, runners_up, thirds)
-        ko = simulate_knockout(r32_pairs, poisson_model, elo_ratings, rng)
+        ko = simulate_knockout(r32_pairs, poisson_model, elo_ratings, rng, goal_scale=goal_scale)
 
         for t in ko['r32']:    counts['r16'][t]    += 1
         for t in ko['r16']:    counts['qf'][t]     += 1

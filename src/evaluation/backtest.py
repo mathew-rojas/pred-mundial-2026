@@ -9,7 +9,7 @@ from sklearn.metrics import log_loss, accuracy_score
 from src.models.poisson_model import PoissonModel
 from src.models import ml_model
 from src.models.ensemble import ensemble_probs
-from src.features.build_features import FEATURE_COLS
+from src.features.build_features import FEATURE_COLS, CORE_FEATURE_COLS
 
 _OUTCOME_IDX = {"away_win": 0, "draw": 1, "home_win": 2}
 
@@ -33,7 +33,7 @@ def run_backtest(
     df["neutral"] = df["neutral"].astype(bool)
 
     test_mask = (df["tournament"] == tournament) & (df["date"].dt.year == test_year)
-    df_test = df[test_mask].dropna(subset=FEATURE_COLS).copy()
+    df_test = df[test_mask].dropna(subset=CORE_FEATURE_COLS).copy()
 
     cutoff = df_test["date"].min()
     df_train_all = df[df["date"] < cutoff].copy()
@@ -63,6 +63,15 @@ def run_backtest(
             m["home_elo_before"], m["away_elo_before"],
             m["home_form"],       m["away_form"],
             neutral=neutral,
+            home_wc22_shots=m.get("home_wc22_shots", float("nan")),
+            away_wc22_shots=m.get("away_wc22_shots", float("nan")),
+            home_wc22_sot=m.get("home_wc22_sot", float("nan")),
+            away_wc22_sot=m.get("away_wc22_sot", float("nan")),
+            home_wc22_possession=m.get("home_wc22_possession", float("nan")),
+            away_wc22_possession=m.get("away_wc22_possession", float("nan")),
+            home_fifa_rank=m.get("home_fifa_rank", float("nan")),
+            away_fifa_rank=m.get("away_fifa_rank", float("nan")),
+            rank_diff=m.get("rank_diff", float("nan")),
         )
         ep = ensemble_probs(pp, xp)
 

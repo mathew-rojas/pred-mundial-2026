@@ -48,21 +48,30 @@ elo = update_elo(played, load_elo()); save_elo(elo)
 
 ### Data flow
 ```
-data/raw/results.csv  (downloaded from GitHub)
+data/raw/results.csv              (downloaded from GitHub)
+data/raw/world_cup_2022_stats.csv (Kaggle — 64 WC 2022 matches, 88 cols)
+data/raw/world_cup_2026_matches.csv (Kaggle — WC 2026 matches with FIFA rank)
   → src/features/build_features.py::build_features()
       - filters to 1993+ before ELO computation
       - computes ELO via src/features/elo.py::compute_elo()
       - computes rolling form (last 5 matches, vectorized groupby)
-  → data/processed/features.csv  (30k rows, 18 cols)
+      - merges WC 2022 team profiles via src/features/wc_team_profiles.py
+      - merges FIFA rank via src/features/wc_rank.py
+  → data/processed/features.csv  (30k rows, 27 cols)
       - trains Poisson on all data, XGBoost on 2006+
   → models/  (poisson_params.json, xgb_pipeline.joblib, elo_ratings.json)
 ```
 
 ### Models
 
-**Poisson** (`src/models/poisson_model.py`): Dixon-Coles model. Fits per-team attack/defence via L-BFGS-B with exponential time-decay weights (`xi=0.002`). Inner log-likelihood is fully vectorised (numpy array indexing, no Python loop). Outputs a `(9×9)` score probability matrix → `predict_exact_score()` returns argmax, `predict_outcome_probs()` returns win/draw/loss from triangle sums.
+**Poisson** (`src/models/poisson_model.py`): Dixon-Coles model. Fits per-team attack/defence via L-BFGS-B with exponential time-decay weights (`xi=0.002`). Inner log-likelihood is fully vectorised (numpy array indexing, no Python loop). Outputs a `(9×9)` score probability matrix. `predict_exact_score()` uses `round(λ)` (not argmax) to avoid mode bias. `WC_GOAL_SCALE = (1.36, 1.10)` multiplies λ/μ for all WC predictions to correct systematic underestimation of WC goal rates (diagnosed from WC 2022: model expected 1.14 goals/game, actual 1.55). Pass `goal_scale=WC_GOAL_SCALE` to `predict_score_matrix`, `predict_exact_score`, `predict_outcome_probs`. `predict_outcome_probs()` returns win/draw/loss from triangle sums.
 
-**XGBoost** (`src/models/ml_model.py`): 3-class classifier (0=away win, 1=draw, 2=home win). Features: `home_elo_before`, `away_elo_before`, `elo_diff`, `home_form`, `away_form`, `form_diff`, `neutral` (7 total, defined in `FEATURE_COLS`). Uses `TimeSeriesSplit` CV. Predict via `predict_probs()`.
+**XGBoost** (`src/models/ml_model.py`): 3-class classifier (0=away win, 1=draw, 2=home win). 16 features defined in `FEATURE_COLS`; the original 7 are in `CORE_FEATURE_COLS` (required for all training rows). New features (wc22 profiles, FIFA rank) are sparse — XGBoost handles NaN natively, `dropna` only applied to `CORE_FEATURE_COLS`. Uses `TimeSeriesSplit` CV. Predict via `predict_probs()` which accepts all 16 features as optional kwargs (new ones default to `np.nan`).
+
+Feature groups:
+- **Core (7):** `home_elo_before`, `away_elo_before`, `elo_diff`, `home_form`, `away_form`, `form_diff`, `neutral`
+- **WC 2022 profiles (6):** `home/away_wc22_shots`, `home/away_wc22_sot`, `home/away_wc22_possession` — per-team averages from `world_cup_2022_stats.csv` (32 teams, NaN for others)
+- **FIFA rank (3):** `home/away_fifa_rank`, `rank_diff` — from `world_cup_2026_matches.csv` (WC 2026 teams only)
 
 **Ensemble** (`src/models/ensemble.py`): weighted average of both models' outcome probabilities. Default weights: Poisson 0.6, XGBoost 0.4.
 

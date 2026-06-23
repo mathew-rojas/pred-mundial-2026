@@ -8,6 +8,10 @@ from scipy.optimize import minimize
 from scipy.special import gammaln
 from scipy.stats import poisson
 
+# WC matches score ~36% more goals (home) / ~10% more (away) than the model
+# predicts from general international data. Apply when predicting WC matches.
+WC_GOAL_SCALE: tuple[float, float] = (1.36, 1.10)  # (home_scale, away_scale)
+
 
 class PoissonModel:
     def __init__(self, xi: float = 0.002):
@@ -87,15 +91,29 @@ class PoissonModel:
         }
         return self
 
-    def predict_score_matrix(
-        self, home: str, away: str, neutral: bool = False, max_goals: int = 8
-    ) -> np.ndarray:
-        """Joint probability matrix P(home_goals=i, away_goals=j)."""
+    def _lam_mu(
+        self, home: str, away: str, neutral: bool, goal_scale: tuple[float, float] | None
+    ) -> tuple[float, float]:
         att = self.params_["attack"]
         dfe = self.params_["defence"]
         home_adv = 0.0 if neutral else self.params_["home_adv"]
         lam = np.exp(att.get(home, 0.0) - dfe.get(away, 0.0) + home_adv)
         mu = np.exp(att.get(away, 0.0) - dfe.get(home, 0.0))
+        if goal_scale is not None:
+            lam *= goal_scale[0]
+            mu *= goal_scale[1]
+        return lam, mu
+
+    def predict_score_matrix(
+        self,
+        home: str,
+        away: str,
+        neutral: bool = False,
+        max_goals: int = 8,
+        goal_scale: tuple[float, float] | None = None,
+    ) -> np.ndarray:
+        """Joint probability matrix P(home_goals=i, away_goals=j)."""
+        lam, mu = self._lam_mu(home, away, neutral, goal_scale)
 
         goals = np.arange(max_goals + 1)
         matrix = np.outer(poisson.pmf(goals, lam), poisson.pmf(goals, mu))
@@ -112,17 +130,24 @@ class PoissonModel:
         return matrix / matrix.sum()
 
     def predict_exact_score(
-        self, home: str, away: str, neutral: bool = False
+        self,
+        home: str,
+        away: str,
+        neutral: bool = False,
+        goal_scale: tuple[float, float] | None = None,
     ) -> tuple[int, int]:
-        """Most likely exact score (home_goals, away_goals)."""
-        m = self.predict_score_matrix(home, away, neutral)
-        i, j = np.unravel_index(np.argmax(m), m.shape)
-        return int(i), int(j)
+        """Most likely exact score via rounded expected goals (home_goals, away_goals)."""
+        lam, mu = self._lam_mu(home, away, neutral, goal_scale)
+        return int(round(lam)), int(round(mu))
 
     def predict_outcome_probs(
-        self, home: str, away: str, neutral: bool = False
+        self,
+        home: str,
+        away: str,
+        neutral: bool = False,
+        goal_scale: tuple[float, float] | None = None,
     ) -> dict[str, float]:
-        m = self.predict_score_matrix(home, away, neutral)
+        m = self.predict_score_matrix(home, away, neutral, goal_scale=goal_scale)
         return {
             "home_win": float(np.tril(m, -1).sum()),
             "draw": float(np.trace(m)),
