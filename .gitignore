@@ -1,0 +1,25 @@
+# Downloaded raw data (re-generate with: python -c "from src.data.download import download_all; download_all()")
+data/raw/
+
+# Generated feature matrix (re-generate with: python main.py)
+data/processed/
+
+# Large model binary (re-generate with: python main.py or retrain_full())
+models/*.joblib
+
+# Jupyter
+.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+
+# Artifact from running notebooks outside project root
+notebooks/data/
+
+# OS
+.DS_Store
+Thumbs.db
