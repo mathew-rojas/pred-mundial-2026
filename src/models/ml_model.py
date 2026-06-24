@@ -10,13 +10,24 @@ from sklearn.metrics import classification_report
 from src.features.build_features import FEATURE_COLS, CORE_FEATURE_COLS
 
 
-def train(df: pd.DataFrame, n_splits: int = 5) -> Pipeline:
+def train(
+    df: pd.DataFrame,
+    n_splits: int = 5,
+    wc_weight: float = 2.0,
+    time_xi: float = 0.001,
+) -> Pipeline:
     """Train on all rows that have non-null features; return fitted pipeline."""
     df = df.dropna(subset=CORE_FEATURE_COLS).copy()
     df["neutral"] = df["neutral"].astype(int)
 
     X = df[FEATURE_COLS].values
     y = df["result"].values
+
+    days_ago = (df["date"].max() - df["date"]).dt.days.values
+    time_w = np.exp(-time_xi * days_ago)
+    wc_mask = df["tournament"].str.contains("FIFA World Cup", na=False).values
+    sample_w = time_w * np.where(wc_mask, wc_weight, 1.0)
+    sample_w = sample_w / sample_w.mean()
 
     pipeline = Pipeline([
         ("scaler", StandardScaler()),
@@ -36,7 +47,7 @@ def train(df: pd.DataFrame, n_splits: int = 5) -> Pipeline:
     scores = cross_val_score(pipeline, X, y, cv=tscv, scoring="accuracy")
     print(f"CV accuracy: {scores.mean():.3f} ± {scores.std():.3f}")
 
-    pipeline.fit(X, y)
+    pipeline.fit(X, y, clf__sample_weight=sample_w)
     return pipeline
 
 

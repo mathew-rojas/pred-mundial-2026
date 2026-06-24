@@ -105,11 +105,11 @@ def retrain_full(
     print(f"  Poisson: {len(df):,} matches | XGBoost: {len(df_ml):,} matches")
 
     print("  Fitting Poisson...")
-    poisson = PoissonModel(xi=0.002)
+    poisson = PoissonModel(xi=0.003, wc_weight=2.0)
     poisson.fit(df)
 
     print("  Fitting XGBoost...")
-    pipeline = ml_model.train(df_ml, n_splits=5)
+    pipeline = ml_model.train(df_ml, n_splits=5, wc_weight=2.0)
 
     # Extract latest ELO ratings
     from pandas import concat

@@ -14,8 +14,9 @@ WC_GOAL_SCALE: tuple[float, float] = (1.36, 1.10)  # (home_scale, away_scale)
 
 
 class PoissonModel:
-    def __init__(self, xi: float = 0.002):
+    def __init__(self, xi: float = 0.003, wc_weight: float = 2.0):
         self.xi = xi
+        self.wc_weight = wc_weight
         self.params_: dict = {}
         self.teams_: list[str] = []
 
@@ -29,7 +30,9 @@ class PoissonModel:
         n = len(self.teams_)
         idx = {t: i for i, t in enumerate(self.teams_)}
 
-        weights = self._time_weight(df["date"])
+        time_w = self._time_weight(df["date"])
+        wc_mask = df["tournament"].str.contains("FIFA World Cup", na=False).values
+        weights = time_w * np.where(wc_mask, self.wc_weight, 1.0)
 
         # Pre-compute arrays once — used inside optimizer on every call
         home_idx = np.array([idx[t] for t in df["home_team"]])

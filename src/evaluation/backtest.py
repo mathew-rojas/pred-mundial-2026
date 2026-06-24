@@ -45,11 +45,11 @@ def run_backtest(
     print(f"  Test             : {len(df_test)} matches  ({tournament} {test_year})")
 
     print("\n  Fitting Poisson ...")
-    poisson = PoissonModel(xi=0.002)
+    poisson = PoissonModel(xi=0.003, wc_weight=2.0)
     poisson.fit(df_train_all)
 
     print("  Fitting XGBoost ...")
-    pipeline = ml_model.train(df_train_ml, n_splits=5)
+    pipeline = ml_model.train(df_train_ml, n_splits=5, wc_weight=2.0)
 
     rows = []
     for _, m in df_test.iterrows():

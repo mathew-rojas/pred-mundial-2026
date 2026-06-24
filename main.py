@@ -77,9 +77,33 @@ def predict_match(
     print(f"    Outcome probs     : home {final['home_win']:.1%}  draw {final['draw']:.1%}  away {final['away_win']:.1%}")
 
 
+_MODEL_FILES = [
+    MODELS_DIR / "poisson_params.json",
+    MODELS_DIR / "xgb_pipeline.joblib",
+    MODELS_DIR / "elo_ratings.json",
+]
+
+
+def _models_exist() -> bool:
+    return all(f.exists() for f in _MODEL_FILES)
+
+
 def main():
     print("=== 1. Download data ===")
-    download_all()
+    new_data = download_all()
+
+    if not new_data and _models_exist():
+        print("\nData unchanged — loading saved models (skip retrain).")
+        poisson_model, pipeline, elo_ratings = load_models()
+        print("\n=== Sample predictions ===")
+        for home, away, neutral in [
+            ("Brazil", "Argentina", True),
+            ("France", "England", False),
+            ("Spain", "Germany", True),
+        ]:
+            predict_match(home, away, poisson_model, pipeline, elo_ratings, neutral)
+        print("\nDone.")
+        return poisson_model, pipeline, elo_ratings
 
     print("\n=== 2. Build features (ELO from 1993+) ===")
     df = build_features(str(DATA_RAW), elo_start=ELO_START)
@@ -91,13 +115,13 @@ def main():
     print(f"  ML training set: {len(df_train)} matches ({ML_START[:4]}+)")
 
     print("\n=== 3. Poisson model ===")
-    poisson_model = PoissonModel(xi=0.002)
+    poisson_model = PoissonModel(xi=0.003, wc_weight=2.0)
     poisson_model.fit(df_train)
     print(f"  Fitted on {len(poisson_model.teams_)} teams")
     print(f"  Home advantage: {poisson_model.params_['home_adv']:.3f}  rho: {poisson_model.params_['rho']:.3f}")
 
     print("\n=== 4. XGBoost model ===")
-    pipeline = ml_model.train(df_train)
+    pipeline = ml_model.train(df_train, wc_weight=2.0)
 
     # Recover final ELO ratings from the full feature dataframe
     # (last elo_after values per team)
