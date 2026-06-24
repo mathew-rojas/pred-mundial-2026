@@ -12,7 +12,11 @@ FIFA World Cup 2026 match predictor. Data source: `martj42/international_results
 # Full pipeline: download data → build features → train both models → save
 python main.py
 
-# Re-download raw CSVs (force refresh)
+# Check GitHub for new data and re-download only changed files (auto on every main.py run)
+# Returns True if any file was updated (main.py uses this to skip retrain when unchanged)
+python -c "from src.data.download import download_all; download_all()"
+
+# Force re-download regardless of remote size
 python -c "from src.data.download import download_all; download_all(force=True)"
 
 # Execute a notebook non-interactively
@@ -64,9 +68,9 @@ data/raw/world_cup_2026_matches.csv (Kaggle — WC 2026 matches with FIFA rank)
 
 ### Models
 
-**Poisson** (`src/models/poisson_model.py`): Dixon-Coles model. Fits per-team attack/defence via L-BFGS-B with exponential time-decay weights (`xi=0.002`). Inner log-likelihood is fully vectorised (numpy array indexing, no Python loop). Outputs a `(9×9)` score probability matrix. `predict_exact_score()` uses `round(λ)` (not argmax) to avoid mode bias. `WC_GOAL_SCALE = (1.36, 1.10)` multiplies λ/μ for all WC predictions to correct systematic underestimation of WC goal rates (diagnosed from WC 2022: model expected 1.14 goals/game, actual 1.55). Pass `goal_scale=WC_GOAL_SCALE` to `predict_score_matrix`, `predict_exact_score`, `predict_outcome_probs`. `predict_outcome_probs()` returns win/draw/loss from triangle sums.
+**Poisson** (`src/models/poisson_model.py`): Dixon-Coles model. Fits per-team attack/defence via L-BFGS-B with exponential time-decay weights (`xi=0.003`). World Cup matches receive an additional `wc_weight=2.0` multiplier on top of time-decay, so WC 2022/2026 results outweigh regular internationals from the same period. Inner log-likelihood is fully vectorised (numpy array indexing, no Python loop). Outputs a `(9×9)` score probability matrix. `predict_exact_score()` uses `round(λ)` (not argmax) to avoid mode bias. `WC_GOAL_SCALE = (1.36, 1.10)` multiplies λ/μ for all WC predictions to correct systematic underestimation of WC goal rates (diagnosed from WC 2022: model expected 1.14 goals/game, actual 1.55). Pass `goal_scale=WC_GOAL_SCALE` to `predict_score_matrix`, `predict_exact_score`, `predict_outcome_probs`. `predict_outcome_probs()` returns win/draw/loss from triangle sums.
 
-**XGBoost** (`src/models/ml_model.py`): 3-class classifier (0=away win, 1=draw, 2=home win). 16 features defined in `FEATURE_COLS`; the original 7 are in `CORE_FEATURE_COLS` (required for all training rows). New features (wc22 profiles, FIFA rank) are sparse — XGBoost handles NaN natively, `dropna` only applied to `CORE_FEATURE_COLS`. Uses `TimeSeriesSplit` CV. Predict via `predict_probs()` which accepts all 16 features as optional kwargs (new ones default to `np.nan`).
+**XGBoost** (`src/models/ml_model.py`): 3-class classifier (0=away win, 1=draw, 2=home win). 16 features defined in `FEATURE_COLS`; the original 7 are in `CORE_FEATURE_COLS` (required for all training rows). New features (wc22 profiles, FIFA rank) are sparse — XGBoost handles NaN natively, `dropna` only applied to `CORE_FEATURE_COLS`. Uses `TimeSeriesSplit` CV. Training uses combined sample weights: `exp(-0.001 × days_ago) × 2.0` for WC matches, `exp(-0.001 × days_ago)` for others (normalised to mean=1), applied at final `pipeline.fit()`. Predict via `predict_probs()` which accepts all 16 features as optional kwargs (new ones default to `np.nan`).
 
 Feature groups:
 - **Core (7):** `home_elo_before`, `away_elo_before`, `elo_diff`, `home_form`, `away_form`, `form_diff`, `neutral`
@@ -100,7 +104,7 @@ Group structure is hardcoded in `GROUPS` dict (12 groups × 4 teams). `NAME_ALIA
 | `01_eda.ipynb` | Dataset exploration: results distribution, goals, ELO evolution, WC history |
 | `02_backtest_wc2022.ipynb` | Held-out evaluation on WC 2022 (64 matches) |
 | `03_simulation_2026.ipynb` | Monte Carlo win probabilities for all 48 teams |
-| `04_live_wc2026.ipynb` | **Live workflow**: 1) clasificaciones, 2) backtest completo (J1+J2) con tabla partido a partido, 3) próximos partidos con top-5 scores + P(local/empate/visita). Predicciones guardadas en `data/predictions/group_stage_md0.csv`. |
+| `04_live_wc2026.ipynb` | **Live workflow**: 1) clasificaciones, 2) backtest completo (J1+J2) con tabla partido a partido, 3) próximos partidos — backtest table repeated + top-5 scores + P(local/empate/visita). Predicciones guardadas en `data/predictions/group_stage_md0.csv`. |
 
 ### ELO design decisions
 - Computed from 1993+ (post-USSR/Yugoslavia dissolution — stable team landscape)
