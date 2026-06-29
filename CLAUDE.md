@@ -83,9 +83,13 @@ Feature groups:
 
 The tournament is in progress. The workflow is:
 1. **After each matchday** — update ELO incrementally (`src/prediction/update.py::update_elo`)
-2. **Between phases** — full retrain (`retrain_full()`) then regenerate all notebooks
-3. **Predict pending matches** — `src/prediction/predict.py::predict_matches()` → score + ensemble probs
+2. **Between phases** — full retrain (`retrain_full()`) then re-execute notebook 04
+3. **Predict pending matches** — notebook 04 auto-detects the current phase and shows the right predictions
 4. **Track accuracy** — `src/prediction/tracker.py`: `save_predictions()` before matches, `evaluate()` after
+
+**Phase detection** (notebook 04, `NEXT_PHASE` variable): counts played WC 2026 matches — <72 → group stage, 72–87 → R32, 88–95 → R16, 96–99 → QF, 100–101 → SF, 102+ → Final.
+
+**Bracket tracking** (`build_bracket` in notebook 04): once group stage is complete (72 matches), computes R32 fixtures from `determine_qualifiers()` + seeded pairing (`seeds[i]` vs `seeds[31-i]`). Then walks each knockout round by looking up actual results in `results.csv` via `_find_ko_winner()`. Falls back to ELO tiebreak for 90-min draws.
 
 ### Monte Carlo simulation (`src/simulation/tournament.py`)
 
@@ -104,7 +108,7 @@ Group structure is hardcoded in `GROUPS` dict (12 groups × 4 teams). `NAME_ALIA
 | `01_eda.ipynb` | Dataset exploration: results distribution, goals, ELO evolution, WC history |
 | `02_backtest_wc2022.ipynb` | Held-out evaluation on WC 2022 (64 matches) |
 | `03_simulation_2026.ipynb` | Monte Carlo win probabilities for all 48 teams |
-| `04_live_wc2026.ipynb` | **Live workflow**: 1) clasificaciones, 2) backtest completo (J1+J2) con tabla partido a partido, 3) próximos partidos — backtest table repeated + top-5 scores + P(local/empate/visita). Predicciones guardadas en `data/predictions/group_stage_md0.csv`. |
+| `04_live_wc2026.ipynb` | **Live workflow** (auto-adapts to any phase): 1) clasificaciones/bracket — standings during group stage, qualified teams once knockout begins; 2) backtest completo — all played matches with J1/J2/J3/KO labels; 3) próxima fase — auto-detects current phase and predicts next round (group stage → octavos → ronda 16 → cuartos → semis → final). Bracket tracker (`build_bracket`) derives R32 fixtures from final group standings, then walks the seeded bracket using actual results to produce R16/QF/SF/Final fixtures. Predictions saved to `data/predictions/{phase}_md{n}.csv`. |
 
 ### ELO design decisions
 - Computed from 1993+ (post-USSR/Yugoslavia dissolution — stable team landscape)

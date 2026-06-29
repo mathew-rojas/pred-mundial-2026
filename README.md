@@ -13,8 +13,9 @@ Backtest on WC 2026 (live, post-hoc evaluation with current models):
 
 | | N | Result accuracy | Exact score |
 |---|---|---|---|
-| Matchday 1 | 24 | 58.3% | 29.2% |
-| Matchday 2 | 24 | 79.2% | 12.5% |
+| Matchday 1 (Jun 11–17) | 24 | 58.3% | 29.2% |
+| Matchday 2 (Jun 18–22) | 20 | 80.0% | 15.0% |
+| Matchday 3 (Jun 23–27) | 4 | 75.0% | 0.0% |
 | **Total** | **48** | **68.8%** | **20.8%** |
 
 Backtest on WC 2022 (true held-out test — models trained before tournament):
@@ -82,6 +83,8 @@ from src.prediction.update import retrain_full
 retrain_full()   # ~2 min, saves all models
 ```
 
+Then re-execute notebook `04_live_wc2026.ipynb` — it auto-detects the current tournament phase (group stage → octavos → ronda 16 → cuartos → semis → final) and predicts the next round automatically, walking the seeded bracket from actual results in `results.csv`.
+
 ## Notebooks
 
 | Notebook | Description |
@@ -89,7 +92,7 @@ retrain_full()   # ~2 min, saves all models
 | `01_eda.ipynb` | Dataset exploration: goals, ELO evolution, WC history, feature correlations |
 | `02_backtest_wc2022.ipynb` | Held-out evaluation on WC 2022 (64 matches) |
 | `03_simulation_2026.ipynb` | Monte Carlo simulation — win probabilities for all 48 teams |
-| `04_live_wc2026.ipynb` | Live workflow: standings · backtest · upcoming match predictions |
+| `04_live_wc2026.ipynb` | Live workflow (auto-adapts phase to phase): standings/bracket · full backtest · next-phase predictions through the Final |
 
 ## Architecture
 
