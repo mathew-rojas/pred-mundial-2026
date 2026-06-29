@@ -65,7 +65,7 @@ def save_elo(elo_ratings: dict[str, float], path: str | None = None) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     with open(dest, "w") as f:
         json.dump(elo_ratings, f, indent=2)
-    print(f"  ELO saved → {dest}")
+    print(f"  ELO saved -> {dest}")
 
 
 def load_elo(path: str | None = None) -> dict[str, float]:

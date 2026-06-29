@@ -19,7 +19,7 @@ def save_predictions(df: pd.DataFrame, phase: str, matchday: int) -> Path:
     PRED_DIR.mkdir(parents=True, exist_ok=True)
     path = PRED_DIR / f"{phase}_md{matchday}.csv"
     df.to_csv(path, index=False)
-    print(f"  Predictions saved → {path}")
+    print(f"  Predictions saved -> {path}")
     return path
 
 
